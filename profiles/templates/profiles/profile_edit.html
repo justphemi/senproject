@@ -1,0 +1,613 @@
+{% extends "profiles/base.html" %}
+{% block title %}Edit {{ profile.display_name }}{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="row-between" style="margin-bottom:18px;">
+    <h1>Edit profile</h1>
+    <a class="muted" href="{% url 'profile_view' page_user.username %}" style="font-size:14px;">Back to profile</a>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+
+    <div class="field">
+      <label>Profile picture</label>
+      <div style="display:flex; justify-content:center; margin: 8px 0 16px 0;">
+        <div id="avatarWrap" class="avatar-edit-trigger" title="Click to change">
+          {% if profile.avatar %}
+            <img id="avatarPreview" src="{{ profile.avatar.url }}" alt="avatar">
+          {% else %}
+            <div class="placeholder" id="avatarPreview">{{ profile.display_name|slice:":1"|upper }}</div>
+          {% endif %}
+          <div class="avatar-overlay">Click to change</div>
+        </div>
+      </div>
+      <input type="file" id="avatarFile" name="avatar" accept="image/jpeg,image/png" style="display:none;">
+      {% if form.avatar.errors %}
+        <div class="errors">{{ form.avatar.errors|join:" " }}</div>
+      {% endif %}
+      <div class="help" style="text-align:center;">Click the image above to upload, crop, and apply a filter. JPG or PNG. Max 1 MB.</div>
+    </div>
+
+    <div class="field">
+      <label for="{{ form.display_name.id_for_label }}">Display name</label>
+      {{ form.display_name }}
+      {% if form.display_name.errors %}
+        <div class="errors">{{ form.display_name.errors|join:" " }}</div>
+      {% endif %}
+    </div>
+
+    <div class="field">
+      <label for="{{ form.bio.id_for_label }}">Bio</label>
+      {{ form.bio }}
+      {% if form.bio.errors %}
+        <div class="errors">{{ form.bio.errors|join:" " }}</div>
+      {% endif %}
+    </div>
+
+    <div class="btn-row" style="justify-content:center;">
+      <button type="submit" class="btn primary">Save changes</button>
+      <a class="btn" href="{% url 'profile_view' page_user.username %}">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<div id="editorModal" class="modal" aria-hidden="true">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2 style="margin:0; font-size:18px;">Edit profile picture</h2>
+      <button type="button" class="modal-close" id="modalClose" aria-label="Close">×</button>
+    </div>
+
+    <div class="modal-body">
+      <div id="dropZone" class="drop-zone">
+        <p style="margin:0 0 8px 0; font-size:15px;">Drop an image here</p>
+        <p class="muted" style="margin:0 0 14px 0; font-size:13px;">or click to choose a file</p>
+        <button type="button" class="btn primary" id="chooseFileBtn">Choose file</button>
+        <input type="file" id="modalFileInput" accept="image/jpeg,image/png" style="display:none;">
+      </div>
+
+      <div id="editorArea" style="display:none;">
+        <div class="canvas-wrap" id="canvasWrap">
+          <canvas id="editorCanvas"></canvas>
+          <div class="crop-overlay" id="cropOverlay">
+            <div class="crop-rect" id="cropRect">
+              <div class="handle nw" data-handle="nw"></div>
+              <div class="handle n"  data-handle="n"></div>
+              <div class="handle ne" data-handle="ne"></div>
+              <div class="handle e"  data-handle="e"></div>
+              <div class="handle se" data-handle="se"></div>
+              <div class="handle s"  data-handle="s"></div>
+              <div class="handle sw" data-handle="sw"></div>
+              <div class="handle w"  data-handle="w"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls">
+          <div class="control-row">
+            <label for="brightnessRange">Brightness</label>
+            <input type="range" id="brightnessRange" min="50" max="150" value="100" step="1">
+            <span id="brightnessValue" class="muted" style="min-width:42px; text-align:right;">100%</span>
+          </div>
+
+          <div class="control-row">
+            <label>Filter</label>
+            <div class="filter-chips" id="filterChips">
+              <button type="button" class="chip active" data-filter="none">None</button>
+              <button type="button" class="chip" data-filter="bw">B / W</button>
+              <button type="button" class="chip" data-filter="bright_up">Brighter</button>
+              <button type="button" class="chip" data-filter="bright_down">Darker</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="errors" id="modalError" style="display:none;"></div>
+      </div>
+    </div>
+
+    <div class="modal-foot">
+      <button type="button" class="btn" id="modalCancel">Cancel</button>
+      <button type="button" class="btn primary" id="modalDone" disabled>Done</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.avatar-edit-trigger {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid #d0d7de;
+  background: #eaeef2;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.avatar-edit-trigger img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.avatar-edit-trigger .placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 56px;
+  color: #57606a;
+}
+.avatar-edit-trigger .avatar-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.avatar-edit-trigger:hover .avatar-overlay { opacity: 1; }
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+.modal.open { display: flex; }
+.modal-card {
+  background: #fff;
+  border-radius: 10px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid #d0d7de;
+}
+.modal-close {
+  background: transparent;
+  border: 0;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  color: #57606a;
+  padding: 0 6px;
+}
+.modal-close:hover { color: #1f2328; }
+.modal-body {
+  padding: 18px;
+  overflow: auto;
+}
+.modal-foot {
+  padding: 14px 18px;
+  border-top: 1px solid #d0d7de;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.drop-zone {
+  border: 2px dashed #d0d7de;
+  border-radius: 8px;
+  padding: 32px 18px;
+  text-align: center;
+  background: #fafbfc;
+  cursor: pointer;
+}
+.drop-zone.dragover { background: #ddf4ff; border-color: #54aeff; }
+
+.canvas-wrap {
+  position: relative;
+  width: 100%;
+  background: #eaeef2;
+  border-radius: 6px;
+  overflow: hidden;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#editorCanvas { display: block; max-width: 100%; }
+
+.crop-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.crop-rect {
+  position: absolute;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+  cursor: move;
+  pointer-events: auto;
+}
+.handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  border: 2px solid #0969da;
+  border-radius: 2px;
+  pointer-events: auto;
+}
+.handle.nw { top: -8px; left: -8px;  cursor: nwse-resize; }
+.handle.n  { top: -8px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+.handle.ne { top: -8px; right: -8px; cursor: nesw-resize; }
+.handle.e  { top: 50%; right: -8px; transform: translateY(-50%); cursor: ew-resize; }
+.handle.se { bottom: -8px; right: -8px; cursor: nwse-resize; }
+.handle.s  { bottom: -8px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+.handle.sw { bottom: -8px; left: -8px; cursor: nesw-resize; }
+.handle.w  { top: 50%; left: -8px; transform: translateY(-50%); cursor: ew-resize; }
+
+.controls {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.control-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.control-row label {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0;
+  min-width: 80px;
+}
+.control-row input[type=range] { flex: 1; }
+
+.filter-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip {
+  border: 1px solid #d0d7de;
+  background: #fff;
+  color: #1f2328;
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.chip:hover { background: #f6f8fa; }
+.chip.active {
+  background: #0969da;
+  border-color: #0969da;
+  color: #fff;
+}
+</style>
+
+<script>
+(function () {
+  var avatarWrap = document.getElementById("avatarWrap");
+  var avatarPreview = document.getElementById("avatarPreview");
+  var avatarFile = document.getElementById("avatarFile");
+
+  var modal = document.getElementById("editorModal");
+  var modalClose = document.getElementById("modalClose");
+  var modalCancel = document.getElementById("modalCancel");
+  var modalDone = document.getElementById("modalDone");
+  var dropZone = document.getElementById("dropZone");
+  var chooseFileBtn = document.getElementById("chooseFileBtn");
+  var modalFileInput = document.getElementById("modalFileInput");
+  var editorArea = document.getElementById("editorArea");
+  var canvasWrap = document.getElementById("canvasWrap");
+  var canvas = document.getElementById("editorCanvas");
+  var ctx = canvas.getContext("2d");
+  var cropOverlay = document.getElementById("cropOverlay");
+  var cropRect = document.getElementById("cropRect");
+  var brightnessRange = document.getElementById("brightnessRange");
+  var brightnessValue = document.getElementById("brightnessValue");
+  var filterChips = document.querySelectorAll("#filterChips .chip");
+  var modalError = document.getElementById("modalError");
+
+  var originalImage = null;
+  var originalFileName = "avatar.jpg";
+  var currentFilter = "none";
+  var currentBrightness = 100;
+  var dragState = null;
+
+  function openModal() {
+    modal.classList.add("open");
+    modal.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+  }
+  function closeModal() {
+    modal.classList.remove("open");
+    modal.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+  }
+
+  avatarWrap.addEventListener("click", function () { openModal(); });
+  modalClose.addEventListener("click", closeModal);
+  modalCancel.addEventListener("click", closeModal);
+  modal.addEventListener("click", function (e) {
+    if (e.target === modal) closeModal();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && modal.classList.contains("open")) closeModal();
+  });
+
+  chooseFileBtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    modalFileInput.click();
+  });
+  dropZone.addEventListener("click", function () { modalFileInput.click(); });
+  ["dragenter", "dragover"].forEach(function (evt) {
+    dropZone.addEventListener(evt, function (e) {
+      e.preventDefault();
+      dropZone.classList.add("dragover");
+    });
+  });
+  ["dragleave", "drop"].forEach(function (evt) {
+    dropZone.addEventListener(evt, function (e) {
+      e.preventDefault();
+      dropZone.classList.remove("dragover");
+    });
+  });
+  dropZone.addEventListener("drop", function (e) {
+    var file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  });
+  modalFileInput.addEventListener("change", function (e) {
+    var file = e.target.files && e.target.files[0];
+    if (file) handleFile(file);
+  });
+
+  function showError(msg) {
+    modalError.textContent = msg;
+    modalError.style.display = "block";
+  }
+  function clearError() {
+    modalError.textContent = "";
+    modalError.style.display = "none";
+  }
+
+  function handleFile(file) {
+    clearError();
+    var okTypes = ["image/jpeg", "image/png"];
+    if (okTypes.indexOf(file.type) === -1) {
+      showError("Only JPG and PNG images are allowed.");
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      showError("Image too large. Max size is 1 MB.");
+      return;
+    }
+    originalFileName = file.name || "avatar.jpg";
+    var reader = new FileReader();
+    reader.onload = function (evt) {
+      var img = new Image();
+      img.onload = function () {
+        originalImage = img;
+        dropZone.style.display = "none";
+        editorArea.style.display = "block";
+        modalDone.disabled = false;
+        setupCanvas();
+      };
+      img.onerror = function () { showError("Could not read image file."); };
+      img.src = evt.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function setupCanvas() {
+    var maxW = 480;
+    var scale = Math.min(1, maxW / originalImage.width);
+    var cw = Math.round(originalImage.width * scale);
+    var ch = Math.round(originalImage.height * scale);
+    canvas.width = cw;
+    canvas.height = ch;
+    canvasWrap.style.width = cw + "px";
+    canvasWrap.style.height = ch + "px";
+    drawCanvas();
+    var pad = Math.round(Math.min(cw, ch) * 0.1);
+    var size = Math.min(cw, ch) - pad * 2;
+    setCropRect(pad, pad, size, size);
+  }
+
+  function setCropRect(x, y, w, h) {
+    cropRect.style.left = x + "px";
+    cropRect.style.top = y + "px";
+    cropRect.style.width = w + "px";
+    cropRect.style.height = h + "px";
+  }
+
+  function getCropRect() {
+    return {
+      x: parseFloat(cropRect.style.left),
+      y: parseFloat(cropRect.style.top),
+      w: parseFloat(cropRect.style.width),
+      h: parseFloat(cropRect.style.height)
+    };
+  }
+
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  function applyCssFilterToCanvas() {
+    var filter = "";
+    if (currentFilter === "bw") filter = "grayscale(100%)";
+    else if (currentFilter === "bright_up") filter = "brightness(" + (1.4) + ")";
+    else if (currentFilter === "bright_down") filter = "brightness(" + (0.7) + ")";
+    if (currentBrightness !== 100) {
+      if (filter) filter += " ";
+      filter += "brightness(" + (currentBrightness / 100) + ")";
+    }
+    canvas.style.filter = filter;
+  }
+
+  function drawCanvas() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
+    applyCssFilterToCanvas();
+  }
+
+  brightnessRange.addEventListener("input", function () {
+    currentBrightness = parseInt(brightnessRange.value, 10);
+    brightnessValue.textContent = currentBrightness + "%";
+    applyCssFilterToCanvas();
+  });
+
+  filterChips.forEach(function (chip) {
+    chip.addEventListener("click", function () {
+      filterChips.forEach(function (c) { c.classList.remove("active"); });
+      chip.classList.add("active");
+      currentFilter = chip.getAttribute("data-filter");
+      applyCssFilterToCanvas();
+    });
+  });
+
+  cropRect.addEventListener("mousedown", function (e) {
+    if (e.target.classList.contains("handle")) return;
+    e.preventDefault();
+    var r = getCropRect();
+    dragState = {
+      mode: "move",
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: r.x, origY: r.y,
+      origW: r.w, origH: r.h
+    };
+  });
+  cropOverlay.querySelectorAll(".handle").forEach(function (h) {
+    h.addEventListener("mousedown", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var r = getCropRect();
+      dragState = {
+        mode: "resize",
+        handle: h.getAttribute("data-handle"),
+        startX: e.clientX,
+        startY: e.clientY,
+        origX: r.x, origY: r.y,
+        origW: r.w, origH: r.h,
+        maxX: canvas.clientWidth,
+        maxY: canvas.clientHeight
+      };
+    });
+  });
+  document.addEventListener("mousemove", function (e) {
+    if (!dragState) return;
+    e.preventDefault();
+    var dx = e.clientX - dragState.startX;
+    var dy = e.clientY - dragState.startY;
+    if (dragState.mode === "move") {
+      var nx = clamp(dragState.origX + dx, 0, canvas.clientWidth - dragState.origW);
+      var ny = clamp(dragState.origY + dy, 0, canvas.clientHeight - dragState.origH);
+      setCropRect(nx, ny, dragState.origW, dragState.origH);
+    } else if (dragState.mode === "resize") {
+      var x = dragState.origX, y = dragState.origY, w = dragState.origW, h = dragState.origH;
+      var h_ = dragState.handle;
+      if (h_.indexOf("e") !== -1) w = clamp(dragState.origW + dx, 20, dragState.maxX - x);
+      if (h_.indexOf("s") !== -1) h = clamp(dragState.origH + dy, 20, dragState.maxY - y);
+      if (h_.indexOf("w") !== -1) {
+        var newX = clamp(dragState.origX + dx, 0, dragState.origX + dragState.origW - 20);
+        w = dragState.origX + dragState.origW - newX;
+        x = newX;
+      }
+      if (h_.indexOf("n") !== -1) {
+        var newY = clamp(dragState.origY + dy, 0, dragState.origY + dragState.origH - 20);
+        h = dragState.origY + dragState.origH - newY;
+        y = newY;
+      }
+      setCropRect(x, y, w, h);
+    }
+  });
+  document.addEventListener("mouseup", function () { dragState = null; });
+
+  modalDone.addEventListener("click", function () {
+    if (!originalImage) return;
+    var rect = getCropRect();
+    var sx = Math.round(rect.x * (originalImage.width / canvas.width));
+    var sy = Math.round(rect.y * (originalImage.height / canvas.height));
+    var sw = Math.round(rect.w * (originalImage.width / canvas.width));
+    var sh = Math.round(rect.h * (originalImage.height / canvas.height));
+
+    var out = document.createElement("canvas");
+    var outSize = 400;
+    out.width = outSize;
+    out.height = outSize;
+    var octx = out.getContext("2d");
+
+    var tmp = document.createElement("canvas");
+    tmp.width = sw;
+    tmp.height = sh;
+    var tctx = tmp.getContext("2d");
+    tctx.drawImage(originalImage, sx, sy, sw, sh, 0, 0, sw, sh);
+
+    var filterStr = "";
+    if (currentFilter === "bw") filterStr = "grayscale(100%) ";
+    else if (currentFilter === "bright_up") filterStr = "brightness(1.4) ";
+    else if (currentFilter === "bright_down") filterStr = "brightness(0.7) ";
+    if (currentBrightness !== 100) filterStr += "brightness(" + (currentBrightness / 100) + ") ";
+
+    if (filterStr) {
+      tmp.style.filter = filterStr;
+      octx.filter = filterStr;
+    }
+    octx.drawImage(tmp, 0, 0, outSize, outSize);
+
+    out.toBlob(function (blob) {
+      if (!blob) { showError("Could not export image."); return; }
+      var ext = (originalFileName.split(".").pop() || "jpg").toLowerCase();
+      if (ext !== "jpg" && ext !== "jpeg" && ext !== "png") ext = "jpg";
+      var name = "avatar." + ext;
+      var file = new File([blob], name, { type: blob.type });
+      var dt = new DataTransfer();
+      dt.items.add(file);
+      avatarFile.files = dt.files;
+
+      var reader = new FileReader();
+      reader.onload = function (ev) {
+        avatarPreview.innerHTML = "";
+        var img = document.createElement("img");
+        img.src = ev.target.result;
+        img.style.width = "100%";
+        img.style.height = "100%";
+        img.style.objectFit = "cover";
+        avatarPreview.appendChild(img);
+        closeModal();
+        resetModal();
+      };
+      reader.readAsDataURL(file);
+    }, "image/jpeg", 0.92);
+  });
+
+  function resetModal() {
+    dropZone.style.display = "block";
+    editorArea.style.display = "none";
+    modalDone.disabled = true;
+    originalImage = null;
+    currentFilter = "none";
+    currentBrightness = 100;
+    brightnessRange.value = 100;
+    brightnessValue.textContent = "100%";
+    filterChips.forEach(function (c) { c.classList.remove("active"); });
+    filterChips[0].classList.add("active");
+    clearError();
+    modalFileInput.value = "";
+  }
+})();
+</script>
+{% endblock %}

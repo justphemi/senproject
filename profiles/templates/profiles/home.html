@@ -1,0 +1,21 @@
+{% extends "profiles/base.html" %}
+{% block title %}Find a profile{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Open a profile</h1>
+  <p class="muted">Type a username. If it exists, you will see the profile. If not, it will be created.</p>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="field">
+      <label for="{{ form.username.id_for_label }}">Username</label>
+      {{ form.username }}
+      {% if form.username.errors %}
+        <div class="errors">{{ form.username.errors|join:" " }}</div>
+      {% endif %}
+    </div>
+    <div class="btn-row">
+      <button type="submit" class="btn primary">Continue</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

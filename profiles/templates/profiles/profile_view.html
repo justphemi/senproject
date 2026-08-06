@@ -1,0 +1,30 @@
+{% extends "profiles/base.html" %}
+{% block title %}{{ profile.display_name }}{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="profile-head">
+    {% if profile.avatar %}
+      <img class="avatar avatar-lg" src="{{ profile.avatar.url }}" alt="avatar">
+    {% else %}
+      <div class="avatar avatar-lg placeholder">{{ profile.display_name|slice:":1"|upper }}</div>
+    {% endif %}
+    <div>
+      <h1 style="margin-bottom:4px;">{{ profile.display_name }}</h1>
+      <div class="muted">@{{ page_user.username }}</div>
+    </div>
+  </div>
+
+  {% if profile.bio %}
+    <h2>About</h2>
+    <p class="bio">{{ profile.bio }}</p>
+  {% else %}
+    <p class="muted">No bio yet. (Btw ORJI BOND is MOVING)!!</p>
+  {% endif %}
+
+  <div class="meta">Last updated {{ profile.updated_at|date:"M j, Y, g:i a" }}</div>
+
+  <div class="btn-row">
+    <a class="btn primary" href="{% url 'profile_edit' page_user.username %}">Edit profile</a>
+  </div>
+</div>
+{% endblock %}
