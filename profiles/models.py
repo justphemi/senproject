@@ -1,3 +1,5 @@
+import os
+import uuid
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
@@ -27,12 +29,20 @@ def validate_avatar_type(image):
         )
 
 
+def avatar_upload_path(instance, filename):
+    username = instance.user.username if instance.user_id else "anon"
+    ext = os.path.splitext(filename or "")[1].lower() or ".jpg"
+    if ext not in (".jpg", ".jpeg", ".png"):
+        ext = ".jpg"
+    return f"avatars/{username}/{uuid.uuid4().hex}{ext}"
+
+
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     display_name = models.CharField(max_length=60)
     bio = models.TextField(blank=True, max_length=300)
     avatar = models.ImageField(
-        upload_to="avatars/",
+        upload_to=avatar_upload_path,
         blank=True,
         null=True,
         validators=[validate_avatar_size, validate_avatar_type],
